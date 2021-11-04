@@ -124,7 +124,7 @@ getAtoms (Equiv phi1 phi2) = nub((getAtoms(phi1))++(getAtoms(phi2)))  -- same id
 -}
 getValuations :: [Variable] -> [Valuation]
 getValuations []       = [[]]
-                          -- assign True and False to every elemnts
+                          -- assign True and False to every elements by doing a recursive call
 getValuations (c : cs) = map(\x -> (c, True) : x) (getValuations cs) ++ map(\x -> (c, False) : x) (getValuations cs)
                         
                           
@@ -149,17 +149,19 @@ if expr1 then expr2 else False
 evalF :: Valuation -> Formula -> Bool
 evalF _    Top                 = True
 evalF _    Bot                 = False
-evalF valu (Not phi1)          = not(evalF valu phi1)
-evalF valu (Atom c)            = helpDecomp c valu
-evalF valu (And phi1 phi2)     = (evalF valu phi1) && (evalF valu phi2)
+evalF valu (Not phi1)          = not(evalF valu phi1)   -- negation of normal evalF function 
+evalF valu (Atom c)            = helpDecomp c valu  -- uses helper function
+evalF valu (And phi1 phi2)     = (evalF valu phi1) && (evalF valu phi2) 
 evalF valu (Or phi1 phi2)      = (evalF valu phi1) || (evalF valu phi2)
-evalF valu (Implies phi1 phi2) = if (evalF valu phi1) == False then True else evalF valu phi2
+                                -- if phi1 is False then it's True anyways, else evaluate only phi2
+evalF valu (Implies phi1 phi2) = if (evalF valu phi1) == False then True else evalF valu phi2   
 evalF valu (Equiv phi1 phi2)   = (evalF valu (Implies phi1 phi2)) && (evalF valu (Implies phi2 phi1))
                                           
--- helper function that identify the value part of the input valuation
+-- helper function that identify if c is in valu, if so return the boolean value of c
 helpDecomp :: Variable -> Valuation -> Bool
 helpDecomp c [] = error "missing element"
 helpDecomp c ((x, b) : xs) = if x == c then b else helpDecomp c xs
+
 -- buildTable:
 --  Build a truth table for a given formula.
 --  You can use this function to help check your definitions
@@ -184,10 +186,11 @@ type Context = [Formula]
 --   otherwise, return False.
 prove :: Context -> Formula -> Bool
 prove ctx phi =
-  let decomposed = (decompose [] ctx) 
+  let decomposed = (decompose [] ctx)   -- set the decomposed ctx as decomposed
   in (
-  if (elem phi decomposed || elem Bot decomposed) == True
+  if (elem phi decomposed || elem Bot decomposed) == True -- if either phi or Bot is found in decomposed, then return True
   then True
+  -- if neither were found, go into forward reasoning 'prove_right'
   else prove_right decomposed phi
   )
 
@@ -205,11 +208,12 @@ decompose ctx1 []              = ctx1
 decompose ctx1 (middle : ctx2) = 
   case middle of
     And phi1 phi2     -> decompose ctx1 (phi1 : phi2 : ctx2)
-    Implies phi1 phi2 -> if prove (ctx1 ++ ctx2) phi1 then decompose ctx1 (phi2 : ctx2) -- call prove on phi1 with ctx = ctx
-                            else decompose (ctx1 ++ [Implies phi1 phi2]) ctx2-- if prove （ctx1++ctx2） phi1 then decompose ctx1 (phi2 : ctx2)
-                                                                        -- else decompose (ctx1 ++ [Implies phi1 phi2]) ctx2
-                                        
-    Equiv phi1 phi2   -> [Implies phi1 phi2,  Implies phi2 phi1] -- do similar as decompose:r
+    Implies phi1 phi2 -> if prove (ctx1 ++ ctx2) phi1 then decompose ctx1 (phi2 : ctx2) -- call prove on phi1 with ctx = (ctx1 ++ ctx2)
+                            else decompose (ctx1 ++ [Implies phi1 phi2]) ctx2-- if prove （ctx1++ctx2） phi1 is True 
+                                                                            -- then decompose the result of ctx2 and phi2
+                                                                            -- else discard implication to ctx1 and decompose the result of ctx2
+                     -- do similar thing as decompose And since they are similar in rule                   
+    Equiv phi1 phi2   -> decompose ctx1 (Implies phi1 phi2 : Implies phi2 phi1 : ctx2) 
     
     middle            -> decompose (ctx1 ++ [middle]) ctx2
 
